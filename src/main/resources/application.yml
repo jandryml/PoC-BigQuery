@@ -1,2 +1,10 @@
 server:
   port: 8082
+
+big-query:
+  config:
+    credentialsFilePath: {fill-in}
+  product:
+    datasetName: {fill-in}
+    tableName: {fill-in}
+    batchSize: 100

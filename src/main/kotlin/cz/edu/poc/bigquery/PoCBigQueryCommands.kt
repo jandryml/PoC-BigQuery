@@ -1,4 +1,4 @@
-package cz.edu.poc.dbshudown
+package cz.edu.poc.bigquery
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan

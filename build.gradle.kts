@@ -18,18 +18,18 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
+	implementation("com.google.cloud:google-cloud-bigquery:2.24.5")
 
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-	implementation("org.junit.jupiter:junit-jupiter:5.9.2")
-	runtimeOnly("com.mysql:mysql-connector-j")
+	testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
 tasks.withType<KotlinCompile> {
 	kotlinOptions {
 		freeCompilerArgs = listOf("-Xjsr305=strict")
-		jvmTarget = "11"
+		jvmTarget = "17"
 	}
 }
 

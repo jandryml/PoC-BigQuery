@@ -1,6 +1,7 @@
 package cz.edu.poc.bigquery.service
 
 import com.google.cloud.bigquery.BigQuery
+import com.google.cloud.bigquery.BigQueryException
 import com.google.cloud.bigquery.FieldValueList
 import com.google.cloud.bigquery.InsertAllRequest
 import com.google.cloud.bigquery.InsertAllResponse
@@ -42,13 +43,13 @@ class BigQueryService(
         return resultList
     }
 
-    fun writeValues(products: List<BigQueryProductDTO>) {
-        val tableId = TableId.of(
+    fun writeValues(products: List<BigQueryProductDTO>): Boolean {
+        val tmpTableId = TableId.of(
             properties.datasetName,
-            properties.tableName
+            properties.tempMergeTableName
         )
 
-        val requestBuilder = InsertAllRequest.newBuilder(tableId)
+        val requestBuilder = InsertAllRequest.newBuilder(tmpTableId)
 
         products.forEach {
             requestBuilder.addRow(convertToBigQueryRowContent(it))
@@ -62,6 +63,26 @@ class BigQueryService(
             }
         } else {
             println("Rows successfully inserted.")
+        }
+
+        return try {
+            val mergeQueryConfig = QueryJobConfiguration.newBuilder(mergeQuery).build()
+            val mergeJob = bigQuery.create(JobInfo.of(mergeQueryConfig))
+            mergeJob.waitFor()
+            println("Data merged successfully into BigQuery table")
+
+            true
+        } catch (ex: BigQueryException) {
+            println("Export of product to BigQuery failed.")
+            false
+        } catch (ex: InterruptedException) {
+            println("Export of product to BigQuery failed. ")
+            false
+        } finally {
+            val truncateQueryConfig = QueryJobConfiguration.newBuilder(truncateQuery).build()
+            val truncateJob = bigQuery.create(JobInfo.of(truncateQueryConfig))
+            truncateJob.waitFor()
+            println("Truncate finished")
         }
     }
 
@@ -92,4 +113,48 @@ class BigQueryService(
             fieldValueList.get("modified").stringValue
         )
     }
+
+    private val mergeQuery = """
+        MERGE `{datasetName}.{tableName}` t 
+            USING `{datasetName}.{tempMergeTableName}` s 
+            ON t.longArticleId = s.longArticleId WHEN 
+        MATCHED THEN UPDATE SET 
+            t.title = s.title, 
+            t.article = s.article, 
+            t.descriptionContent = s.descriptionContent, 
+            t.mainCategoryTitle = s.mainCategoryTitle, 
+            t.categoryTree = s.categoryTree, 
+            t.image = s.image, 
+            t.producerTitle = s.producerTitle, 
+            t.modified = s.modified 
+        WHEN NOT MATCHED THEN INSERT (
+            longArticleId, 
+            title, 
+            article, 
+            descriptionContent, 
+            mainCategoryTitle, 
+            categoryTree, 
+            image, 
+            producerTitle, 
+            modified
+        ) VALUES (
+            s.longArticleId, 
+            s.title, 
+            s.article, 
+            s.descriptionContent, 
+            s.mainCategoryTitle, 
+            s.categoryTree, 
+            s.image, 
+            s.producerTitle, 
+            s.modified
+        )
+        """
+        .trimIndent()
+        .replace("{datasetName}", "eef_data_L0")
+        .replace("{tableName}", "product")
+        .replace("{tempMergeTableName}", "product_tmp")
+
+    private val truncateQuery = "TRUNCATE TABLE `{datasetName}.{tempMergeTableName}`"
+        .replace("{datasetName}", "eef_data_L0")
+        .replace("{tempMergeTableName}", "product_tmp")
 }

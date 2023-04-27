@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConstructorBinding
 class BigQueryProductProperties @ConstructorBinding constructor(
     val datasetName: String,
     val tableName: String,
+    val tempMergeTableName: String,
     val batchSize: Int
 ) {
     companion object {

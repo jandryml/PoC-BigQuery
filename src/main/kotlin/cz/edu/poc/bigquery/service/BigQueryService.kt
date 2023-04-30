@@ -13,6 +13,8 @@ import com.google.cloud.bigquery.TableResult
 import cz.edu.poc.bigquery.config.BigQueryProductProperties
 import cz.edu.poc.bigquery.dto.BigQueryProductDTO
 import org.springframework.stereotype.Service
+import java.time.Instant
+
 
 @Service
 class BigQueryService(
@@ -96,7 +98,7 @@ class BigQueryService(
             "categoryTree" to productDTO.categoryTree,
             "image" to productDTO.image,
             "producerTitle" to productDTO.producerTitle,
-            "modified" to productDTO.modified
+            "modified" to Instant.now().toString()
         )
     }
 
@@ -115,8 +117,8 @@ class BigQueryService(
     }
 
     private val mergeQuery = """
-        MERGE `{datasetName}.{tableName}` t 
-            USING `{datasetName}.{tempMergeTableName}` s 
+        MERGE `${properties.datasetName}.${properties.tableName}` t 
+            USING `${properties.datasetName}.${properties.tempMergeTableName}` s 
             ON t.longArticleId = s.longArticleId WHEN 
         MATCHED THEN UPDATE SET 
             t.title = s.title, 
@@ -150,11 +152,8 @@ class BigQueryService(
         )
         """
         .trimIndent()
-        .replace("{datasetName}", "eef_data_L0")
-        .replace("{tableName}", "product")
-        .replace("{tempMergeTableName}", "product_tmp")
 
-    private val truncateQuery = "TRUNCATE TABLE `{datasetName}.{tempMergeTableName}`"
-        .replace("{datasetName}", "eef_data_L0")
-        .replace("{tempMergeTableName}", "product_tmp")
+    private val truncateQuery =
+        "TRUNCATE TABLE `${properties.datasetName}.${properties.tempMergeTableName}`"
+
 }

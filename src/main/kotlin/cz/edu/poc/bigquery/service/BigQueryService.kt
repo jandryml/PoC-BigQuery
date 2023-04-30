@@ -2,47 +2,40 @@ package cz.edu.poc.bigquery.service
 
 import com.google.cloud.bigquery.BigQuery
 import com.google.cloud.bigquery.BigQueryException
-import com.google.cloud.bigquery.FieldValueList
 import com.google.cloud.bigquery.InsertAllRequest
 import com.google.cloud.bigquery.InsertAllResponse
 import com.google.cloud.bigquery.Job
 import com.google.cloud.bigquery.JobInfo
 import com.google.cloud.bigquery.QueryJobConfiguration
 import com.google.cloud.bigquery.TableId
-import com.google.cloud.bigquery.TableResult
 import cz.edu.poc.bigquery.config.BigQueryProductProperties
 import cz.edu.poc.bigquery.dto.BigQueryProductDTO
+import cz.edu.poc.bigquery.mapper.BigQueryProductMapper
 import org.springframework.stereotype.Service
-import java.time.Instant
 
 
 @Service
 class BigQueryService(
     private val bigQuery: BigQuery,
-    private val properties: BigQueryProductProperties
+    private val properties: BigQueryProductProperties,
+    private val mapper: BigQueryProductMapper
 ) {
 
     fun readValues(): List<BigQueryProductDTO> {
-        val getTestDataQuery =
-            "SELECT longArticleId, title, article, descriptionContent, mainCategoryTitle, categoryTree, image, producerTitle, modified" +
-                    " FROM `${properties.datasetName}.${properties.tableName}`"
-        val queryConfig: QueryJobConfiguration = QueryJobConfiguration.newBuilder(getTestDataQuery).build()
+        val queryConfig: QueryJobConfiguration = QueryJobConfiguration.newBuilder(selectQuery).build()
 
         var queryJob: Job? = bigQuery.create(JobInfo.newBuilder(queryConfig).build())
         queryJob = queryJob?.waitFor()
+
         if (queryJob == null) {
             throw Exception("job no longer exists")
         } else if (queryJob.status.error != null) {
             throw Exception(queryJob.status.error.toString())
         }
 
-        val result: TableResult = queryJob.getQueryResults()
-
-        val resultList = result.values.map {
-            convertToDTO(it)
+        return queryJob.getQueryResults().values.map {
+            mapper.convertToDTO(it)
         }
-
-        return resultList
     }
 
     fun writeValues(products: List<BigQueryProductDTO>): Boolean {
@@ -54,7 +47,7 @@ class BigQueryService(
         val requestBuilder = InsertAllRequest.newBuilder(tmpTableId)
 
         products.forEach {
-            requestBuilder.addRow(convertToBigQueryRowContent(it))
+            requestBuilder.addRow(mapper.convertToBigQueryRowContent(it))
         }
 
         val response: InsertAllResponse = bigQuery.insertAll(requestBuilder.build())
@@ -88,33 +81,19 @@ class BigQueryService(
         }
     }
 
-    private fun convertToBigQueryRowContent(productDTO: BigQueryProductDTO): Map<String, Any> {
-        return mapOf(
-            "longArticleId" to productDTO.longArticleId,
-            "title" to productDTO.title,
-            "article" to productDTO.article,
-            "descriptionContent" to productDTO.descriptionContent,
-            "mainCategoryTitle" to productDTO.mainCategoryTitle,
-            "categoryTree" to productDTO.categoryTree,
-            "image" to productDTO.image,
-            "producerTitle" to productDTO.producerTitle,
-            "modified" to Instant.now().toString()
-        )
-    }
-
-    private fun convertToDTO(fieldValueList: FieldValueList): BigQueryProductDTO {
-        return BigQueryProductDTO(
-            fieldValueList.get("longArticleId").stringValue,
-            fieldValueList.get("title").stringValue,
-            fieldValueList.get("article").stringValue,
-            fieldValueList.get("descriptionContent").stringValue,
-            fieldValueList.get("mainCategoryTitle").stringValue,
-            fieldValueList.get("categoryTree").stringValue,
-            fieldValueList.get("image").stringValue,
-            fieldValueList.get("producerTitle").stringValue,
-            fieldValueList.get("modified").stringValue
-        )
-    }
+    val selectQuery ="""
+        SELECT 
+            longArticleId,
+            title,
+            article,
+            descriptionContent,
+            mainCategoryTitle,
+            categoryTree,
+            image,
+            producerTitle,
+            modified
+        FROM `${properties.datasetName}.${properties.tableName}`
+    """.trimIndent()
 
     private val mergeQuery = """
         MERGE `${properties.datasetName}.${properties.tableName}` t 
@@ -153,7 +132,5 @@ class BigQueryService(
         """
         .trimIndent()
 
-    private val truncateQuery =
-        "TRUNCATE TABLE `${properties.datasetName}.${properties.tempMergeTableName}`"
-
+    private val truncateQuery = "TRUNCATE TABLE `${properties.datasetName}.${properties.tempMergeTableName}`"
 }

@@ -14,16 +14,13 @@ class BigQueryController(
     private val bigQueryService: BigQueryService
 ) {
 
-    @GetMapping(
-        value = ["/products"],
-        produces = ["application/json;charset=UTF-8"]
-    )
+    @GetMapping("/products")
     fun getValues(): List<BigQueryProductDTO> {
         return bigQueryService.readValues()
     }
 
     @PostMapping("/products")
     fun insertValues(@RequestBody products: List<BigQueryProductDTO>): Boolean {
-        return bigQueryService.writeValues(products)
+        return bigQueryService.exportValues(products)
     }
 }

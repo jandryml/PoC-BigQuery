@@ -3,24 +3,9 @@ package cz.edu.poc.bigquery.mapper
 import com.google.cloud.bigquery.FieldValueList
 import cz.edu.poc.bigquery.dto.BigQueryProductDTO
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 @Component
 class BigQueryProductMapper {
-
-    fun convertToBigQueryRowContent(productDTO: BigQueryProductDTO): Map<String, Any> {
-        return mapOf(
-            "longArticleId" to productDTO.longArticleId,
-            "title" to productDTO.title,
-            "article" to productDTO.article,
-            "descriptionContent" to productDTO.descriptionContent,
-            "mainCategoryTitle" to productDTO.mainCategoryTitle,
-            "categoryTree" to productDTO.categoryTree,
-            "image" to productDTO.image,
-            "producerTitle" to productDTO.producerTitle,
-            "modified" to Instant.now().toString()
-        )
-    }
 
     fun convertToDTO(fieldValueList: FieldValueList): BigQueryProductDTO {
         return BigQueryProductDTO(

@@ -46,7 +46,7 @@ class BigQueryService(
         }
     }
 
-    fun writeValues(products: List<BigQueryProductDTO>): Boolean {
+    fun exportValues(products: List<BigQueryProductDTO>): Boolean {
         return try {
             LOG.debug("Converting product list to JSON file.")
             convertProductsToJSON(products, properties.exportFilePath)

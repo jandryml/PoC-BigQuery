@@ -9,7 +9,8 @@ class BigQueryProductProperties @ConstructorBinding constructor(
     val tableName: String,
     val tempMergeTableName: String,
     val exportFilePath: String,
-    val batchSize: Int
+    val batchSize: Int,
+    val performanceTestSize: Int
 ) {
     companion object {
         const val PROP_BASE = "big-query.product"

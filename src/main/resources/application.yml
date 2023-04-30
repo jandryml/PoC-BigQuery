@@ -9,3 +9,4 @@ big-query:
     tableName: {fill-in}
     batchSize: 100
     exportFilePath: {fill-in}
+    performanceTestSize: 20000

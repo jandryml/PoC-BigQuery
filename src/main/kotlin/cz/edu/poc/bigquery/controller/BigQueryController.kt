@@ -21,6 +21,11 @@ class BigQueryController(
 
     @PostMapping("/products")
     fun insertValues(@RequestBody products: List<BigQueryProductDTO>): Boolean {
-        return bigQueryService.exportValues(products)
+        return bigQueryService.exportProducts(products)
+    }
+
+    @PostMapping("/products/performance")
+    fun executePerformanceTest(): Long {
+        return bigQueryService.exportProductsPerformanceTest()
     }
 }

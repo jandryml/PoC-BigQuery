@@ -14,12 +14,15 @@ import cz.edu.poc.bigquery.dto.BigQueryProductDTO
 import cz.edu.poc.bigquery.mapper.BigQueryProductMapper
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.util.StopWatch
 import java.io.BufferedWriter
+import java.io.File
 import java.io.FileWriter
 import java.io.IOException
 import java.nio.channels.Channels
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.math.min
 
 
 @Service
@@ -46,18 +49,69 @@ class BigQueryService(
         }
     }
 
-    fun exportValues(products: List<BigQueryProductDTO>): Boolean {
+    fun exportProducts(products: List<BigQueryProductDTO>): Boolean {
+        // convert list to provider, which is simulating batch query to database
+        val dataProvider: (Int, Int) -> List<BigQueryProductDTO> = { offset: Int, batchSize: Int ->
+            if (offset >= products.size) {
+                emptyList()
+            } else {
+                products.subList(offset, min(products.size, offset + batchSize))
+            }
+        }
+
+        return exportValues(dataProvider)
+    }
+
+    fun exportProductsPerformanceTest(): Long {
+        val watch = StopWatch()
+
+        val productTemplate = BigQueryProductDTO(
+            longArticleId = "1",
+            title = "Example Product 2 - updated",
+            article = "ABC123",
+            descriptionContent = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+            mainCategoryTitle = "Laptops",
+            categoryTree = "Electronics > Computers & Tablets > Laptops",
+            image = "https://example.com/image1.jpg",
+            producerTitle = "Example Manufacturer 1",
+            modified = "2022-04-22T10:31:00Z"
+        )
+
+        watch.start()
+
+        val dataProvider: (Int, Int) -> List<BigQueryProductDTO> = { offset: Int, batchSize: Int ->
+            if (offset > properties.performanceTestSize) {
+                emptyList()
+            } else {
+                IntRange(offset, offset + batchSize).map {
+                    productTemplate.copy(
+                        longArticleId = it.toString()
+                    )
+                }
+            }
+        }
+
+        exportValues(dataProvider)
+        watch.stop()
+        return watch.totalTimeMillis.also {
+            LOG.info("Performance run finished, total millis: $it")
+        }
+    }
+
+
+    private fun exportValues(dataProvider: (offset: Int, batchSize: Int) -> List<BigQueryProductDTO>): Boolean {
         return try {
             LOG.debug("Converting product list to JSON file.")
-            convertProductsToJSON(products, properties.exportFilePath)
+            convertProductsToJSON(dataProvider, properties.exportFilePath)
             LOG.debug("Export products to BigQuery tmp table.")
             exportProductsToTmpTable()
             LOG.debug("Executing merge command.")
             mergeProductsToBqTable()
             LOG.info("Data merged successfully into BigQuery table")
+            File(properties.exportFilePath).delete()
             true
         } catch (ex: IOException) {
-            LOG.error("Converting products to JSON failed.", ex)
+            LOG.error("Error during work with export JSON file.", ex)
             false
         } catch (ex: InterruptedException) {
             LOG.error("Export of product to BigQuery failed.", ex)
@@ -93,12 +147,23 @@ class BigQueryService(
         println("State: " + job.status.state)
     }
 
-    fun convertProductsToJSON(products: List<BigQueryProductDTO>, filename: String) {
-        BufferedWriter(FileWriter(filename)).use { writer ->
+    fun convertProductsToJSON(
+        dataProvider: (offset: Int, batchSize: Int) -> List<BigQueryProductDTO>,
+        filename: String
+    ) {
+        BufferedWriter(FileWriter(filename, true)).use { writer ->
             val objectMapper = ObjectMapper()
-            products.forEach {
-                val json: String = objectMapper.writeValueAsString(it)
-                writer.appendLine(json)
+            var rowsInserted = 0
+            var batch: List<BigQueryProductDTO> = dataProvider(rowsInserted, properties.batchSize)
+
+            while (batch.isNotEmpty()) {
+                batch.forEach {
+                    val json: String = objectMapper.writeValueAsString(it)
+                    writer.appendLine(json)
+                }
+
+                rowsInserted += properties.batchSize
+                batch = dataProvider(rowsInserted, properties.batchSize)
             }
         }
     }

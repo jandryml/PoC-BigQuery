@@ -8,6 +8,7 @@ class BigQueryProductProperties @ConstructorBinding constructor(
     val datasetName: String,
     val tableName: String,
     val tempMergeTableName: String,
+    val exportFilePath: String,
     val batchSize: Int
 ) {
     companion object {

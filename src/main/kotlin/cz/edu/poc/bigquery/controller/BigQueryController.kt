@@ -23,7 +23,7 @@ class BigQueryController(
     }
 
     @PostMapping("/products")
-    fun insertValues(@RequestBody products: List<BigQueryProductDTO>) {
-        bigQueryService.writeValues(products)
+    fun insertValues(@RequestBody products: List<BigQueryProductDTO>): Boolean {
+        return bigQueryService.writeValues(products)
     }
 }

@@ -8,3 +8,4 @@ big-query:
     datasetName: {fill-in}
     tableName: {fill-in}
     batchSize: 100
+    exportFilePath: {fill-in}

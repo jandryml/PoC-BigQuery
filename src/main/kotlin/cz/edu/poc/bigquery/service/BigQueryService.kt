@@ -1,17 +1,25 @@
 package cz.edu.poc.bigquery.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.cloud.bigquery.BigQuery
 import com.google.cloud.bigquery.BigQueryException
-import com.google.cloud.bigquery.InsertAllRequest
-import com.google.cloud.bigquery.InsertAllResponse
+import com.google.cloud.bigquery.FormatOptions
 import com.google.cloud.bigquery.Job
 import com.google.cloud.bigquery.JobInfo
 import com.google.cloud.bigquery.QueryJobConfiguration
 import com.google.cloud.bigquery.TableId
+import com.google.cloud.bigquery.WriteChannelConfiguration
 import cz.edu.poc.bigquery.config.BigQueryProductProperties
 import cz.edu.poc.bigquery.dto.BigQueryProductDTO
 import cz.edu.poc.bigquery.mapper.BigQueryProductMapper
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.io.BufferedWriter
+import java.io.FileWriter
+import java.io.IOException
+import java.nio.channels.Channels
+import java.nio.file.Files
+import java.nio.file.Path
 
 
 @Service
@@ -39,49 +47,63 @@ class BigQueryService(
     }
 
     fun writeValues(products: List<BigQueryProductDTO>): Boolean {
+        return try {
+            LOG.debug("Converting product list to JSON file.")
+            convertProductsToJSON(products, properties.exportFilePath)
+            LOG.debug("Export products to BigQuery tmp table.")
+            exportProductsToTmpTable()
+            LOG.debug("Executing merge command.")
+            mergeProductsToBqTable()
+            LOG.info("Data merged successfully into BigQuery table")
+            true
+        } catch (ex: IOException) {
+            LOG.error("Converting products to JSON failed.", ex)
+            false
+        } catch (ex: InterruptedException) {
+            LOG.error("Export of product to BigQuery failed.", ex)
+            false
+        } catch (ex: BigQueryException) {
+            LOG.error("Export of product to BigQuery failed.", ex)
+            false
+        }
+    }
+
+    private fun mergeProductsToBqTable() {
+        val mergeQueryConfig = QueryJobConfiguration.newBuilder(mergeQuery).build()
+        val mergeJob = bigQuery.create(JobInfo.of(mergeQueryConfig))
+        mergeJob.waitFor()
+    }
+
+    private fun exportProductsToTmpTable() {
         val tmpTableId = TableId.of(
             properties.datasetName,
             properties.tempMergeTableName
         )
 
-        val requestBuilder = InsertAllRequest.newBuilder(tmpTableId)
+        val writeChannelConfiguration = WriteChannelConfiguration.newBuilder(tmpTableId)
+            .setWriteDisposition(JobInfo.WriteDisposition.WRITE_TRUNCATE)
+            .setFormatOptions(FormatOptions.json()).build()
 
-        products.forEach {
-            requestBuilder.addRow(mapper.convertToBigQueryRowContent(it))
-        }
+        val writer = bigQuery.writer(writeChannelConfiguration)
 
-        val response: InsertAllResponse = bigQuery.insertAll(requestBuilder.build())
+        Channels.newOutputStream(writer)
+            .use { stream -> Files.copy(Path.of(properties.exportFilePath), stream) }
 
-        if (response.hasErrors()) {
-            for (entry in response.insertErrors.entries) {
-                println("Error on row ${entry.key}: ${entry.value}")
+        val job = writer.job.waitFor()
+        println("State: " + job.status.state)
+    }
+
+    fun convertProductsToJSON(products: List<BigQueryProductDTO>, filename: String) {
+        BufferedWriter(FileWriter(filename)).use { writer ->
+            val objectMapper = ObjectMapper()
+            products.forEach {
+                val json: String = objectMapper.writeValueAsString(it)
+                writer.appendLine(json)
             }
-        } else {
-            println("Rows successfully inserted.")
-        }
-
-        return try {
-            val mergeQueryConfig = QueryJobConfiguration.newBuilder(mergeQuery).build()
-            val mergeJob = bigQuery.create(JobInfo.of(mergeQueryConfig))
-            mergeJob.waitFor()
-            println("Data merged successfully into BigQuery table")
-
-            true
-        } catch (ex: BigQueryException) {
-            println("Export of product to BigQuery failed.")
-            false
-        } catch (ex: InterruptedException) {
-            println("Export of product to BigQuery failed. ")
-            false
-        } finally {
-            val truncateQueryConfig = QueryJobConfiguration.newBuilder(truncateQuery).build()
-            val truncateJob = bigQuery.create(JobInfo.of(truncateQueryConfig))
-            truncateJob.waitFor()
-            println("Truncate finished")
         }
     }
 
-    val selectQuery ="""
+    val selectQuery = """
         SELECT 
             longArticleId,
             title,
@@ -132,5 +154,8 @@ class BigQueryService(
         """
         .trimIndent()
 
-    private val truncateQuery = "TRUNCATE TABLE `${properties.datasetName}.${properties.tempMergeTableName}`"
+    companion object {
+        private val LOG = LoggerFactory.getLogger(BigQueryService::class.java)
+
+    }
 }

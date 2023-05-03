@@ -83,7 +83,7 @@ class BigQueryService(
             if (offset > properties.performanceTestSize) {
                 emptyList()
             } else {
-                IntRange(offset, offset + batchSize).map {
+                IntRange(offset, offset + batchSize - 1).map {
                     productTemplate.copy(
                         longArticleId = it.toString()
                     )
@@ -108,7 +108,7 @@ class BigQueryService(
             LOG.debug("Executing merge command.")
             mergeProductsToBqTable()
             LOG.info("Data merged successfully into BigQuery table")
-            File(properties.exportFilePath).delete()
+//            File(properties.exportFilePath).delete()
             true
         } catch (ex: IOException) {
             LOG.error("Error during work with export JSON file.", ex)
@@ -144,6 +144,11 @@ class BigQueryService(
             .use { stream -> Files.copy(Path.of(properties.exportFilePath), stream) }
 
         val job = writer.job.waitFor()
+
+        job.status?.executionErrors?.forEach {
+            LOG.warn("Error during exporting discounts: ${it.message}")
+        }
+        
         println("State: " + job.status.state)
     }
 
@@ -151,16 +156,16 @@ class BigQueryService(
         dataProvider: (offset: Int, batchSize: Int) -> List<BigQueryProductDTO>,
         filename: String
     ) {
-        BufferedWriter(FileWriter(filename, true)).use { writer ->
+        BufferedWriter(FileWriter(filename)).use { writer ->
             val objectMapper = ObjectMapper()
             var rowsInserted = 0
             var batch: List<BigQueryProductDTO> = dataProvider(rowsInserted, properties.batchSize)
 
             while (batch.isNotEmpty()) {
-                batch.forEach {
-                    val json: String = objectMapper.writeValueAsString(it)
-                    writer.appendLine(json)
-                }
+                batch.map { mapper.convertToBigQueryRowContent(it) }
+                    .forEach {
+                        writer.appendLine(objectMapper.writeValueAsString(it))
+                    }
 
                 rowsInserted += properties.batchSize
                 batch = dataProvider(rowsInserted, properties.batchSize)

@@ -3,9 +3,24 @@ package cz.edu.poc.bigquery.mapper
 import com.google.cloud.bigquery.FieldValueList
 import cz.edu.poc.bigquery.dto.BigQueryProductDTO
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class BigQueryProductMapper {
+
+    fun convertToBigQueryRowContent(productDTO: BigQueryProductDTO): BigQueryProductDTO {
+        return BigQueryProductDTO(
+            productDTO.longArticleId,
+            productDTO.title,
+            productDTO.article,
+            productDTO.descriptionContent,
+            productDTO.mainCategoryTitle,
+            productDTO.categoryTree,
+            productDTO.image,
+            productDTO.producerTitle,
+            Instant.now().toString()
+        )
+    }
 
     fun convertToDTO(fieldValueList: FieldValueList): BigQueryProductDTO {
         return BigQueryProductDTO(
